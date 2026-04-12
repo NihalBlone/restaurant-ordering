@@ -2,11 +2,13 @@ package com.nihal.restaurantordering.service;
 
 import com.nihal.restaurantordering.domain.OrderStatus;
 import com.nihal.restaurantordering.exception.ConflictException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Component
 public class OrderStatusTransitionValidator {
 
@@ -21,6 +23,7 @@ public class OrderStatusTransitionValidator {
         if (ALLOWED_TRANSITIONS.getOrDefault(currentStatus, Set.of()).contains(nextStatus)) {
             return;
         }
+        log.warn("Invalid status transition from {} to {}", currentStatus, nextStatus);
         throw new ConflictException(buildMessage(currentStatus, nextStatus));
     }
 

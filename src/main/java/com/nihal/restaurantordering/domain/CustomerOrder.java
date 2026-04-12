@@ -19,6 +19,7 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "idx_orders_restaurant_id", columnList = "restaurant_id"),
                 @Index(name = "idx_orders_table_id", columnList = "table_id"),
+                @Index(name = "idx_orders_created_at", columnList = "created_at"),
                 @Index(name = "idx_orders_session_id", columnList = "session_id"),
                 @Index(name = "idx_orders_status", columnList = "status")
         }

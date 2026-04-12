@@ -70,8 +70,7 @@ public class OrderService {
         if (normalizedIdempotencyKey != null) {
             OrderResponse existingOrder = idempotencyService.findExistingResponse(normalizedIdempotencyKey);
             if (existingOrder != null) {
-                log.info("Idempotent replay served existing order. key={} tableId={} orderId={}",
-                        normalizedIdempotencyKey, table.getId(), existingOrder.orderId());
+                log.info("Reusing order {} for idempotency key {}", existingOrder.orderId(), normalizedIdempotencyKey);
                 return existingOrder;
             }
         }
@@ -164,7 +163,7 @@ public class OrderService {
         } catch (DataIntegrityViolationException exception) {
             tableOrderRateLimiter.release(table.getId(), rateLimitToken);
             if (idempotencyKey != null) {
-                log.info("Idempotency key collision detected. Returning existing order. key={} tableId={}", idempotencyKey, table.getId());
+                log.info("Detected concurrent idempotency insert for key {}. Loading existing order.", idempotencyKey);
                 return idempotencyService.findExistingResponseOrThrow(idempotencyKey, exception);
             }
             throw exception;
