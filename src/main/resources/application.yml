@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: restaurant-ordering
+  datasource:
+    url: jdbc:h2:mem:restaurantdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
+server:
+  error:
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  websocket:
+    allowed-origins: "*"
