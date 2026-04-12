@@ -1,6 +1,7 @@
 package com.nihal.restaurantordering.service;
 
 import com.nihal.restaurantordering.domain.CustomerOrder;
+import com.nihal.restaurantordering.domain.MenuCategory;
 import com.nihal.restaurantordering.domain.MenuItem;
 import com.nihal.restaurantordering.domain.OrderItem;
 import com.nihal.restaurantordering.domain.OrderStatus;
@@ -12,10 +13,10 @@ import com.nihal.restaurantordering.dto.order.PlaceOrderRequest;
 import com.nihal.restaurantordering.events.OrderCreatedEvent;
 import com.nihal.restaurantordering.events.OrderStatusChangedEvent;
 import com.nihal.restaurantordering.exception.BadRequestException;
-import com.nihal.restaurantordering.exception.ConflictException;
 import com.nihal.restaurantordering.exception.ForbiddenException;
 import com.nihal.restaurantordering.exception.NotFoundException;
 import com.nihal.restaurantordering.repository.CustomerOrderRepository;
+import com.nihal.restaurantordering.repository.MenuCategoryRepository;
 import com.nihal.restaurantordering.repository.MenuItemRepository;
 import com.nihal.restaurantordering.repository.OrderItemRepository;
 import com.nihal.restaurantordering.util.InputSanitizer;
@@ -33,9 +34,11 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -49,12 +52,14 @@ public class OrderService {
 
     private final RestaurantContextService restaurantContextService;
     private final MenuItemRepository menuItemRepository;
+    private final MenuCategoryRepository menuCategoryRepository;
     private final CustomerOrderRepository customerOrderRepository;
     private final OrderItemRepository orderItemRepository;
     private final OrderMapper orderMapper;
     private final InputSanitizer inputSanitizer;
     private final IdempotencyService idempotencyService;
     private final TableOrderRateLimiter tableOrderRateLimiter;
+    private final OrderStatusTransitionValidator orderStatusTransitionValidator;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -75,19 +80,23 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public OrdersResponse getOrdersByTable(UUID tableId, int page, int size) {
+    public OrdersResponse getOrdersByTable(UUID tableId, UUID sessionId, int page, int size) {
         restaurantContextService.getActiveTable(tableId);
         Pageable pageable = PageRequest.of(page, size);
-        OffsetDateTime sessionStart = OffsetDateTime.now(ZoneOffset.UTC).minusHours(TABLE_SESSION_HOURS);
-        Page<CustomerOrder> ordersPage = customerOrderRepository.findRecentOrdersByTableId(tableId, sessionStart, pageable);
+        Page<CustomerOrder> ordersPage = fetchOrdersPage(tableId, sessionId, pageable);
         Map<UUID, List<OrderItem>> itemsByOrderId = groupOrderItems(ordersPage.getContent().stream().map(CustomerOrder::getId).toList());
 
         List<OrderResponse> orders = ordersPage.getContent().stream()
                 .map(order -> orderMapper.toOrderResponse(order, itemsByOrderId.getOrDefault(order.getId(), List.of())))
                 .toList();
 
+        UUID resolvedSessionId = sessionId != null
+                ? sessionId
+                : orders.stream().findFirst().map(OrderResponse::sessionId).orElse(null);
+
         return OrdersResponse.builder()
                 .tableId(tableId)
+                .sessionId(resolvedSessionId)
                 .page(ordersPage.getNumber())
                 .size(ordersPage.getSize())
                 .totalElements(ordersPage.getTotalElements())
@@ -102,7 +111,7 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException("Order not found for id " + orderId + " in restaurant " + restaurantId));
 
         OrderStatus previousStatus = order.getStatus();
-        validateStatusTransition(order.getStatus(), nextStatus);
+        orderStatusTransitionValidator.validate(order.getStatus(), nextStatus);
         order.setStatus(nextStatus);
         CustomerOrder savedOrder = customerOrderRepository.save(order);
         OrderResponse response = buildOrderResponse(savedOrder);
@@ -116,14 +125,16 @@ public class OrderService {
         String customerName = inputSanitizer.sanitizeCustomerName(request.customerName());
         Map<UUID, Integer> quantitiesByMenuItem = aggregateOrderItems(request.items());
         List<MenuItem> menuItems = menuItemRepository.findAllByIdInAndRestaurantIdAndAvailableTrue(quantitiesByMenuItem.keySet(), table.getRestaurantId());
-        validateMenuItems(table.getRestaurantId(), quantitiesByMenuItem.keySet(), menuItems);
+        validateMenuItems(table, quantitiesByMenuItem.keySet(), menuItems);
         Instant rateLimitToken = tableOrderRateLimiter.acquire(table.getId());
 
         try {
+            UUID sessionId = resolveSessionId(table, request.sessionId());
             CustomerOrder order = new CustomerOrder();
             order.setId(UUID.randomUUID());
             order.setRestaurantId(table.getRestaurantId());
             order.setTableId(table.getId());
+            order.setSessionId(sessionId);
             order.setCustomerName(customerName);
             order.setStatus(OrderStatus.PLACED);
 
@@ -136,10 +147,16 @@ public class OrderService {
 
             List<OrderItem> savedItems = orderItemRepository.saveAll(orderItems);
             OrderResponse response = orderMapper.toOrderResponse(savedOrder, savedItems);
-            log.info("Order created. restaurantId={} tableId={} orderId={} totalItems={} totalAmount={}",
+            log.info("Order {} created for table {} restaurant {} session {}",
+                    savedOrder.getId(),
+                    savedOrder.getTableId(),
+                    savedOrder.getRestaurantId(),
+                    savedOrder.getSessionId());
+            log.info("Order created. restaurantId={} tableId={} orderId={} sessionId={} totalItems={} totalAmount={}",
                     savedOrder.getRestaurantId(),
                     savedOrder.getTableId(),
                     savedOrder.getId(),
+                    savedOrder.getSessionId(),
                     response.totalItems(),
                     response.estimatedTotalAmount());
             eventPublisher.publishEvent(new OrderCreatedEvent(response));
@@ -176,25 +193,23 @@ public class OrderService {
         return aggregated;
     }
 
-    private void validateMenuItems(UUID restaurantId, Collection<UUID> requestedItemIds, List<MenuItem> menuItems) {
+    private void validateMenuItems(RestaurantTable table, Collection<UUID> requestedItemIds, List<MenuItem> menuItems) {
         if (menuItems.size() != requestedItemIds.size()) {
             throw new BadRequestException("One or more menu items are invalid, unavailable, or belong to another restaurant");
         }
 
-        boolean crossRestaurant = menuItems.stream().anyMatch(item -> !restaurantId.equals(item.getRestaurantId()));
+        boolean crossRestaurant = menuItems.stream().anyMatch(item -> !table.getRestaurantId().equals(item.getRestaurantId()));
         if (crossRestaurant) {
             throw new ForbiddenException("Cross-restaurant access is not allowed");
         }
-    }
 
-    private void validateStatusTransition(OrderStatus currentStatus, OrderStatus nextStatus) {
-        if (currentStatus == OrderStatus.PLACED && nextStatus == OrderStatus.PREPARING) {
-            return;
+        Set<UUID> categoryIds = menuItems.stream()
+                .map(MenuItem::getCategoryId)
+                .collect(Collectors.toCollection(HashSet::new));
+        List<MenuCategory> categories = menuCategoryRepository.findAllByIdInAndRestaurantId(categoryIds, table.getRestaurantId());
+        if (categories.size() != categoryIds.size()) {
+            throw new ForbiddenException("Menu items must belong to categories in the same restaurant as the table");
         }
-        if (currentStatus == OrderStatus.PREPARING && nextStatus == OrderStatus.SERVED) {
-            return;
-        }
-        throw new ConflictException("Invalid order status transition from " + currentStatus + " to " + nextStatus);
     }
 
     private OrderResponse buildOrderResponse(CustomerOrder order) {
@@ -209,5 +224,27 @@ public class OrderService {
         return orderItemRepository.findAllByOrderIdIn(orderIds)
                 .stream()
                 .collect(Collectors.groupingBy(OrderItem::getOrderId));
+    }
+
+    private UUID resolveSessionId(RestaurantTable table, UUID requestedSessionId) {
+        if (requestedSessionId == null) {
+            return UUID.randomUUID();
+        }
+
+        customerOrderRepository.findFirstBySessionIdOrderByCreatedAtDesc(requestedSessionId)
+                .ifPresent(existingOrder -> {
+                    if (!table.getId().equals(existingOrder.getTableId())) {
+                        throw new ForbiddenException("Session identifier does not belong to the requested table");
+                    }
+                });
+        return requestedSessionId;
+    }
+
+    private Page<CustomerOrder> fetchOrdersPage(UUID tableId, UUID sessionId, Pageable pageable) {
+        if (sessionId != null) {
+            return customerOrderRepository.findByTableIdAndSessionIdOrderByCreatedAtDesc(tableId, sessionId, pageable);
+        }
+        OffsetDateTime sessionStart = OffsetDateTime.now(ZoneOffset.UTC).minusHours(TABLE_SESSION_HOURS);
+        return customerOrderRepository.findRecentOrdersByTableId(tableId, sessionStart, pageable);
     }
 }

@@ -13,6 +13,10 @@ import java.util.UUID;
 
 public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, UUID> {
 
+    Optional<CustomerOrder> findFirstBySessionIdOrderByCreatedAtDesc(UUID sessionId);
+
+    Optional<CustomerOrder> findFirstByTableIdAndSessionIdOrderByCreatedAtDesc(UUID tableId, UUID sessionId);
+
     @Query("""
             select o
             from CustomerOrder o
@@ -23,6 +27,8 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, UU
     Page<CustomerOrder> findRecentOrdersByTableId(@Param("tableId") UUID tableId,
                                                   @Param("sessionStart") OffsetDateTime sessionStart,
                                                   Pageable pageable);
+
+    Page<CustomerOrder> findByTableIdAndSessionIdOrderByCreatedAtDesc(UUID tableId, UUID sessionId, Pageable pageable);
 
     Optional<CustomerOrder> findByIdAndRestaurantId(UUID id, UUID restaurantId);
 }

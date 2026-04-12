@@ -29,6 +29,7 @@ public class OrderMapper {
                 .orderId(order.getId())
                 .restaurantId(order.getRestaurantId())
                 .tableId(order.getTableId())
+                .sessionId(order.getSessionId())
                 .customerName(order.getCustomerName())
                 .status(order.getStatus())
                 .totalItems(totalItems)

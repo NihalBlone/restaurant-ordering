@@ -13,6 +13,7 @@ public record OrderResponse(
         UUID orderId,
         UUID restaurantId,
         UUID tableId,
+        UUID sessionId,
         String customerName,
         OrderStatus status,
         Integer totalItems,

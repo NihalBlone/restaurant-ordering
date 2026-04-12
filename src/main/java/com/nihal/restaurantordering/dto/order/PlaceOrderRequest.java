@@ -13,6 +13,8 @@ public record PlaceOrderRequest(
         @NotNull(message = "tableId is required")
         UUID tableId,
 
+        UUID sessionId,
+
         @NotBlank(message = "customerName is required")
         @Size(max = 80, message = "customerName must not exceed 80 characters")
         String customerName,

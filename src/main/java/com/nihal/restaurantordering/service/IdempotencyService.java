@@ -11,6 +11,8 @@ import com.nihal.restaurantordering.repository.OrderItemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +44,7 @@ public class IdempotencyService {
                 .orElse(null);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void claimKey(String key, UUID orderId) {
         if (key == null) {
             return;

@@ -9,6 +9,7 @@ import com.nihal.restaurantordering.dto.order.OrdersResponse;
 import com.nihal.restaurantordering.dto.order.PlaceOrderRequest;
 import com.nihal.restaurantordering.exception.ConflictException;
 import com.nihal.restaurantordering.repository.CustomerOrderRepository;
+import com.nihal.restaurantordering.repository.MenuCategoryRepository;
 import com.nihal.restaurantordering.repository.MenuItemRepository;
 import com.nihal.restaurantordering.repository.OrderItemRepository;
 import com.nihal.restaurantordering.util.InputSanitizer;
@@ -44,6 +45,8 @@ class OrderServiceTest {
     @Mock
     private MenuItemRepository menuItemRepository;
     @Mock
+    private MenuCategoryRepository menuCategoryRepository;
+    @Mock
     private CustomerOrderRepository customerOrderRepository;
     @Mock
     private OrderItemRepository orderItemRepository;
@@ -57,20 +60,24 @@ class OrderServiceTest {
     private ApplicationEventPublisher eventPublisher;
 
     private OrderMapper orderMapper;
+    private OrderStatusTransitionValidator orderStatusTransitionValidator;
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
         orderMapper = new OrderMapper();
+        orderStatusTransitionValidator = new OrderStatusTransitionValidator();
         orderService = new OrderService(
                 restaurantContextService,
                 menuItemRepository,
+                menuCategoryRepository,
                 customerOrderRepository,
                 orderItemRepository,
                 orderMapper,
                 inputSanitizer,
                 idempotencyService,
                 tableOrderRateLimiter,
+                orderStatusTransitionValidator,
                 eventPublisher
         );
     }
@@ -86,6 +93,7 @@ class OrderServiceTest {
                 .orderId(UUID.randomUUID())
                 .restaurantId(table.getRestaurantId())
                 .tableId(tableId)
+                .sessionId(UUID.randomUUID())
                 .customerName("Nihal")
                 .status(OrderStatus.PLACED)
                 .totalItems(1)
@@ -97,7 +105,7 @@ class OrderServiceTest {
         when(idempotencyService.normalizeKey(" idem-1 ")).thenReturn("idem-1");
         when(idempotencyService.findExistingResponse("idem-1")).thenReturn(existingOrder);
 
-        OrderResponse response = orderService.placeOrder(" idem-1 ", new PlaceOrderRequest(tableId, "Nihal", List.of()));
+        OrderResponse response = orderService.placeOrder(" idem-1 ", new PlaceOrderRequest(tableId, null, "Nihal", List.of()));
 
         assertThat(response).isEqualTo(existingOrder);
         verify(customerOrderRepository, never()).save(any());
@@ -105,7 +113,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void getOrdersByTableUsesThreeHourSessionWindow() {
+    void getOrdersByTableUsesThreeHourSessionWindowWhenSessionIdMissing() {
         UUID tableId = UUID.randomUUID();
         RestaurantTable table = new RestaurantTable();
         table.setId(tableId);
@@ -113,7 +121,7 @@ class OrderServiceTest {
         when(customerOrderRepository.findRecentOrdersByTableId(eq(tableId), any(OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        OrdersResponse response = orderService.getOrdersByTable(tableId, 0, 20);
+        OrdersResponse response = orderService.getOrdersByTable(tableId, null, 0, 20);
 
         ArgumentCaptor<OffsetDateTime> cutoffCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         verify(customerOrderRepository).findRecentOrdersByTableId(eq(tableId), cutoffCaptor.capture(), any(Pageable.class));
@@ -123,6 +131,22 @@ class OrderServiceTest {
 
         assertThat(cutoff.toInstant()).isBetween(expectedLowerBound, expectedUpperBound);
         assertThat(response.orders()).isEmpty();
+    }
+
+    @Test
+    void getOrdersByTableUsesSessionIdWhenProvided() {
+        UUID tableId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        RestaurantTable table = new RestaurantTable();
+        table.setId(tableId);
+        when(restaurantContextService.getActiveTable(tableId)).thenReturn(table);
+        when(customerOrderRepository.findByTableIdAndSessionIdOrderByCreatedAtDesc(eq(tableId), eq(sessionId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        OrdersResponse response = orderService.getOrdersByTable(tableId, sessionId, 0, 20);
+
+        verify(customerOrderRepository).findByTableIdAndSessionIdOrderByCreatedAtDesc(eq(tableId), eq(sessionId), any(Pageable.class));
+        assertThat(response.sessionId()).isEqualTo(sessionId);
     }
 
     @Test
@@ -139,7 +163,7 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> orderService.updateOrderStatus(orderId, restaurantId, OrderStatus.SERVED))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("Invalid order status transition");
+                .hasMessageContaining("PLACED");
 
         verify(customerOrderRepository, never()).save(any());
     }
@@ -153,6 +177,7 @@ class OrderServiceTest {
         order.setId(orderId);
         order.setRestaurantId(restaurantId);
         order.setTableId(tableId);
+        order.setSessionId(UUID.randomUUID());
         order.setCustomerName("Nihal");
         order.setStatus(OrderStatus.PLACED);
         order.setCreatedAt(OffsetDateTime.now().minusMinutes(1));

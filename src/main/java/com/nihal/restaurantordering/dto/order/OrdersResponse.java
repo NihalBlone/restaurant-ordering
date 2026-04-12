@@ -8,6 +8,7 @@ import java.util.UUID;
 @Builder
 public record OrdersResponse(
         UUID tableId,
+        UUID sessionId,
         int page,
         int size,
         long totalElements,

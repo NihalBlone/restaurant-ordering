@@ -45,10 +45,11 @@ public class OrderController {
     @GetMapping
     public OrdersResponse getOrdersByTable(
             @RequestParam @NotNull UUID tableId,
+            @RequestParam(required = false) UUID sessionId,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ) {
-        return orderService.getOrdersByTable(tableId, page, size);
+        return orderService.getOrdersByTable(tableId, sessionId, page, size);
     }
 
     @PutMapping("/{orderId}/status")
