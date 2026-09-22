@@ -3,31 +3,51 @@ package com.nihal.restaurantordering.bootstrap;
 import com.nihal.restaurantordering.domain.MenuCategory;
 import com.nihal.restaurantordering.domain.MenuItem;
 import com.nihal.restaurantordering.domain.Restaurant;
-import com.nihal.restaurantordering.domain.RestaurantTable;
+import com.nihal.restaurantordering.domain.RestaurantAdmin;
+import com.nihal.restaurantordering.dto.admin.CreateTableRequest;
+import com.nihal.restaurantordering.service.AdminTableService;
 import com.nihal.restaurantordering.repository.MenuCategoryRepository;
 import com.nihal.restaurantordering.repository.MenuItemRepository;
 import com.nihal.restaurantordering.repository.RestaurantRepository;
-import com.nihal.restaurantordering.repository.RestaurantTableRepository;
+import com.nihal.restaurantordering.repository.RestaurantAdminRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Component
+@ConditionalOnProperty(name = "app.sample.enabled", havingValue = "true")
 @RequiredArgsConstructor
+@Slf4j
 public class SampleDataLoader implements CommandLineRunner {
 
     private final RestaurantRepository restaurantRepository;
-    private final RestaurantTableRepository restaurantTableRepository;
+    private final RestaurantAdminRepository restaurantAdminRepository;
+    private final AdminTableService adminTableService;
     private final MenuCategoryRepository menuCategoryRepository;
     private final MenuItemRepository menuItemRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.sample.admin-username}")
+    private String sampleAdminUsername;
+
+    @Value("${app.sample.admin-email}")
+    private String sampleAdminEmail;
+
+    @Value("${app.sample.admin-password}")
+    private String sampleAdminPassword;
 
     @Override
     public void run(String... args) {
         if (restaurantRepository.count() > 0) {
+            restaurantRepository.findAll().stream().findFirst().ifPresent(this::ensureSampleAdmin);
             return;
         }
 
@@ -35,21 +55,14 @@ public class SampleDataLoader implements CommandLineRunner {
         restaurant.setName("Spice Garden");
         restaurant.setLocation("Bengaluru, India");
         Restaurant savedRestaurant = restaurantRepository.save(restaurant);
+        ensureSampleAdmin(savedRestaurant);
 
-        List<RestaurantTable> tables = new ArrayList<>();
         for (int i = 1; i <= 5; i++) {
-            RestaurantTable table = new RestaurantTable();
-            table.setRestaurantId(savedRestaurant.getId());
-            table.setTableNumber("T" + i);
-            table.setQrCodeUrl("https://yourapp.com/menu?tableId=TABLE-" + i);
-            table.setActive(true);
-            tables.add(table);
+            var table = adminTableService.createTable(savedRestaurant.getId(), new CreateTableRequest("T" + i));
+            log.info("Sample table created. tableNumber={} tableId={}", table.tableNumber(), table.id());
         }
-        List<RestaurantTable> savedTables = restaurantTableRepository.saveAll(tables);
-        savedTables.forEach(table -> {
-            table.setQrCodeUrl("https://yourapp.com/menu?tableId=" + table.getId());
-            restaurantTableRepository.save(table);
-        });
+
+        log.info("Sample restaurant created. restaurantId={} name={}", savedRestaurant.getId(), savedRestaurant.getName());
 
         MenuCategory starters = saveCategory(savedRestaurant.getId(), "Starters", 1);
         MenuCategory mains = saveCategory(savedRestaurant.getId(), "Main Course", 2);
@@ -64,6 +77,25 @@ public class SampleDataLoader implements CommandLineRunner {
                 createMenuItem(savedRestaurant.getId(), beverages.getId(), "Fresh Lime Soda", "Sweet or salted lime cooler", new BigDecimal("99.00")),
                 createMenuItem(savedRestaurant.getId(), beverages.getId(), "Masala Chai", "House-brewed spiced tea", new BigDecimal("59.00"))
         ));
+    }
+
+    private void ensureSampleAdmin(Restaurant restaurant) {
+        String normalizedUsername = sampleAdminUsername.trim().toLowerCase(Locale.ROOT);
+        if (restaurantAdminRepository.existsByUsernameNormalized(normalizedUsername)) {
+            return;
+        }
+
+        RestaurantAdmin admin = new RestaurantAdmin();
+        admin.setRestaurantId(restaurant.getId());
+        admin.setUsername(sampleAdminUsername.trim());
+        admin.setUsernameNormalized(normalizedUsername);
+        admin.setEmail(sampleAdminEmail.trim());
+        admin.setEmailNormalized(sampleAdminEmail.trim().toLowerCase(Locale.ROOT));
+        admin.setPasswordHash(passwordEncoder.encode(sampleAdminPassword));
+        admin.setActive(true);
+        restaurantAdminRepository.save(admin);
+        log.info("Sample restaurant admin created. username={} restaurantId={}",
+                sampleAdminUsername, restaurant.getId());
     }
 
     private MenuCategory saveCategory(java.util.UUID restaurantId, String name, int displayOrder) {
@@ -85,6 +117,7 @@ public class SampleDataLoader implements CommandLineRunner {
         menuItem.setName(name);
         menuItem.setDescription(description);
         menuItem.setPrice(price);
+        menuItem.setVegetarian(true);
         menuItem.setAvailable(true);
         return menuItem;
     }

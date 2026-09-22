@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +30,13 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, UU
                                                   Pageable pageable);
 
     Page<CustomerOrder> findByTableIdAndSessionIdOrderByCreatedAtDesc(UUID tableId, UUID sessionId, Pageable pageable);
+
+    List<CustomerOrder> findAllByTableIdAndSessionIdOrderByCreatedAtDesc(UUID tableId, UUID sessionId);
+
+    List<CustomerOrder> findAllByRestaurantIdAndSessionIdInOrderByCreatedAtDesc(
+            UUID restaurantId,
+            List<UUID> sessionIds
+    );
 
     Optional<CustomerOrder> findByIdAndRestaurantId(UUID id, UUID restaurantId);
 }

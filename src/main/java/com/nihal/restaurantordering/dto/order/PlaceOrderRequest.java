@@ -1,7 +1,6 @@
 package com.nihal.restaurantordering.dto.order;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -15,7 +14,6 @@ public record PlaceOrderRequest(
 
         UUID sessionId,
 
-        @NotBlank(message = "customerName is required")
         @Size(max = 80, message = "customerName must not exceed 80 characters")
         String customerName,
 

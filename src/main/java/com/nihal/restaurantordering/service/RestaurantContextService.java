@@ -18,12 +18,27 @@ public class RestaurantContextService {
     private final RestaurantRepository restaurantRepository;
 
     public RestaurantTable getActiveTable(UUID tableId) {
-        return restaurantTableRepository.findByIdAndActiveTrue(tableId)
+        var table = restaurantTableRepository.findByIdAndActiveTrue(tableId)
                 .orElseThrow(() -> new NotFoundException("Active table not found for id " + tableId));
+        requireActive(table.getRestaurantId());
+        return table;
+    }
+
+    public RestaurantTable getActiveTableForUpdate(UUID tableId) {
+        var table = restaurantTableRepository.findActiveByIdForUpdate(tableId)
+                .orElseThrow(() -> new NotFoundException("Active table not found for id " + tableId));
+        requireActive(table.getRestaurantId());
+        return table;
     }
 
     public Restaurant getRestaurant(UUID restaurantId) {
         return restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new NotFoundException("Restaurant not found for id " + restaurantId));
+    }
+
+    private void requireActive(UUID restaurantId) {
+        if (getRestaurant(restaurantId).getStatus() != com.nihal.restaurantordering.domain.RestaurantStatus.ACTIVE) {
+            throw new com.nihal.restaurantordering.exception.ForbiddenException("This restaurant is not accepting orders right now");
+        }
     }
 }

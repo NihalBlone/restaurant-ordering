@@ -53,7 +53,7 @@ public class IdempotencyService {
         IdempotencyKey idempotencyKey = new IdempotencyKey();
         idempotencyKey.setKey(key);
         idempotencyKey.setOrderId(orderId);
-        idempotencyKeyRepository.save(idempotencyKey);
+        idempotencyKeyRepository.saveAndFlush(idempotencyKey);
     }
 
     public OrderResponse findExistingResponseOrThrow(String key, DataIntegrityViolationException exception) {

@@ -33,4 +33,13 @@ class TableOrderRateLimiterTest {
 
         assertThat(rateLimiter.acquire(tableId)).isNotNull();
     }
+
+    @Test
+    void allowsDifferentDevicesAtTheSameTable() {
+        UUID tableId = UUID.randomUUID();
+
+        rateLimiter.acquire(tableId, "phone-a");
+
+        assertThat(rateLimiter.acquire(tableId, "phone-b")).isNotNull();
+    }
 }

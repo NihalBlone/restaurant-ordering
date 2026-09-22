@@ -5,10 +5,13 @@ import com.nihal.restaurantordering.dto.order.OrdersResponse;
 import com.nihal.restaurantordering.dto.order.PlaceOrderRequest;
 import com.nihal.restaurantordering.dto.order.UpdateOrderStatusRequest;
 import com.nihal.restaurantordering.service.OrderService;
+import com.nihal.restaurantordering.service.OrderPlacementService;
+import com.nihal.restaurantordering.service.AdminTenantGuard;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
@@ -22,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 import java.util.UUID;
 
@@ -32,14 +37,18 @@ import java.util.UUID;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderPlacementService orderPlacementService;
+    private final AdminTenantGuard adminTenantGuard;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public OrderResponse placeOrder(
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "X-Ordering-Client-Id", required = false)
+            @Size(max = 100) String orderingClientId,
             @Valid @RequestBody PlaceOrderRequest request
     ) {
-        return orderService.placeOrder(idempotencyKey, request);
+        return orderPlacementService.placeOrder(idempotencyKey, orderingClientId, request);
     }
 
     @GetMapping
@@ -55,9 +64,13 @@ public class OrderController {
     @PutMapping("/{orderId}/status")
     public OrderResponse updateOrderStatus(
             @PathVariable UUID orderId,
-            @RequestHeader("X-Restaurant-Id") UUID restaurantId,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UpdateOrderStatusRequest request
     ) {
-        return orderService.updateOrderStatus(orderId, restaurantId, request.status());
+        return orderService.updateOrderStatus(
+                orderId,
+                adminTenantGuard.restaurantId(jwt),
+                request.status()
+        );
     }
 }

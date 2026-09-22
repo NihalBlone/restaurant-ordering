@@ -10,6 +10,8 @@ public record MenuItemResponse(
         UUID id,
         String name,
         String description,
-        BigDecimal price
+        BigDecimal price,
+        String imageUrl,
+        boolean vegetarian
 ) {
 }

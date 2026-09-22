@@ -7,7 +7,6 @@ import com.nihal.restaurantordering.dto.menu.MenuItemResponse;
 import com.nihal.restaurantordering.dto.menu.MenuResponse;
 import com.nihal.restaurantordering.repository.MenuItemRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -23,7 +22,6 @@ public class MenuService {
     private final RestaurantContextService restaurantContextService;
     private final MenuItemRepository menuItemRepository;
 
-    @Cacheable(cacheNames = "menuByTable", key = "#tableId")
     public MenuResponse getMenuByTable(UUID tableId) {
         RestaurantTable table = restaurantContextService.getActiveTable(tableId);
         Restaurant restaurant = restaurantContextService.getRestaurant(table.getRestaurantId());
@@ -53,6 +51,8 @@ public class MenuService {
                         .name(row.getItemName())
                         .description(row.getItemDescription())
                         .price(row.getItemPrice())
+                        .imageUrl(row.getItemImageUrl())
+                        .vegetarian(Boolean.TRUE.equals(row.getItemVegetarian()))
                         .build());
             }
         }

@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:restaurant-tests;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+app:
+  mail:
+    from: test@example.com
+  customer-base-url: http://localhost:5173
+  auth:
+    jwt-secret: test-only-signing-key-not-for-deployment-2026
+    access-token-minutes: 480
+    cookie-name: restaurant_access_token
+    expose-reset-token: true
+    password-reset-minutes: 30
+  sample:
+    enabled: true
+    admin-username: admin
+    admin-email: admin@spicegarden.local
+    admin-password: Admin@12345
+  storage:
+    menu-image-directory: ./target/test-images
+  websocket:
+    allowed-origins: http://localhost:*

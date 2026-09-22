@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/restaurant_ordering}
+    driver-class-name: org.postgresql.Driver
+    username: ${DATABASE_USERNAME:restaurant_app}
+    password: ${DATABASE_PASSWORD}

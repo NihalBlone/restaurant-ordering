@@ -1,8 +1,10 @@
 package com.nihal.restaurantordering.service;
 
 import com.nihal.restaurantordering.dto.events.OrderEventDTO;
+import com.nihal.restaurantordering.dto.events.TableSessionEventDTO;
 import com.nihal.restaurantordering.events.OrderCreatedEvent;
 import com.nihal.restaurantordering.events.OrderStatusChangedEvent;
+import com.nihal.restaurantordering.events.TableSessionClosedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -33,5 +35,20 @@ public class OrderNotificationPublisher {
                 event.order().tableId(), event.order().orderId(), event.order().status());
         OrderEventDTO payload = orderEventMapper.toEvent(event.order(), event.order().updatedAt());
         messagingTemplate.convertAndSend("/topic/table/" + event.order().tableId(), payload);
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleTableSessionClosed(TableSessionClosedEvent event) {
+        TableSessionEventDTO payload = TableSessionEventDTO.builder()
+                .type("SESSION_CLOSED")
+                .tableId(event.session().tableId())
+                .restaurantId(event.session().restaurantId())
+                .sessionId(event.session().closedSessionId())
+                .timestamp(event.session().closedAt())
+                .build();
+        log.info("Publishing session closed event. tableId={} sessionId={}",
+                event.session().tableId(), event.session().closedSessionId());
+        messagingTemplate.convertAndSend("/topic/table/" + event.session().tableId(), payload);
+        messagingTemplate.convertAndSend("/topic/restaurant/" + event.session().restaurantId(), payload);
     }
 }

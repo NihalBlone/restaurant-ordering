@@ -9,6 +9,7 @@ import com.nihal.restaurantordering.dto.order.OrdersResponse;
 import com.nihal.restaurantordering.dto.order.PlaceOrderRequest;
 import com.nihal.restaurantordering.exception.ConflictException;
 import com.nihal.restaurantordering.repository.CustomerOrderRepository;
+import com.nihal.restaurantordering.repository.DiningSessionRepository;
 import com.nihal.restaurantordering.repository.MenuCategoryRepository;
 import com.nihal.restaurantordering.repository.MenuItemRepository;
 import com.nihal.restaurantordering.repository.OrderItemRepository;
@@ -49,6 +50,8 @@ class OrderServiceTest {
     @Mock
     private CustomerOrderRepository customerOrderRepository;
     @Mock
+    private DiningSessionRepository diningSessionRepository;
+    @Mock
     private OrderItemRepository orderItemRepository;
     @Mock
     private InputSanitizer inputSanitizer;
@@ -72,6 +75,7 @@ class OrderServiceTest {
                 menuItemRepository,
                 menuCategoryRepository,
                 customerOrderRepository,
+                diningSessionRepository,
                 orderItemRepository,
                 orderMapper,
                 inputSanitizer,
@@ -101,15 +105,19 @@ class OrderServiceTest {
                 .items(List.of())
                 .build();
 
-        when(restaurantContextService.getActiveTable(tableId)).thenReturn(table);
+        when(restaurantContextService.getActiveTableForUpdate(tableId)).thenReturn(table);
         when(idempotencyService.normalizeKey(" idem-1 ")).thenReturn("idem-1");
         when(idempotencyService.findExistingResponse("idem-1")).thenReturn(existingOrder);
 
-        OrderResponse response = orderService.placeOrder(" idem-1 ", new PlaceOrderRequest(tableId, null, "Nihal", List.of()));
+        OrderResponse response = orderService.placeOrder(
+                " idem-1 ",
+                "client-1",
+                new PlaceOrderRequest(tableId, null, "Nihal", List.of())
+        );
 
         assertThat(response).isEqualTo(existingOrder);
         verify(customerOrderRepository, never()).save(any());
-        verify(tableOrderRateLimiter, never()).acquire(any());
+        verify(tableOrderRateLimiter, never()).acquire(any(), any());
     }
 
     @Test
@@ -147,6 +155,28 @@ class OrderServiceTest {
 
         verify(customerOrderRepository).findByTableIdAndSessionIdOrderByCreatedAtDesc(eq(tableId), eq(sessionId), any(Pageable.class));
         assertThat(response.sessionId()).isEqualTo(sessionId);
+    }
+
+    @Test
+    void getOrdersByTableUsesServerActiveSessionInsteadOfStaleClientSession() {
+        UUID tableId = UUID.randomUUID();
+        UUID activeSessionId = UUID.randomUUID();
+        UUID staleSessionId = UUID.randomUUID();
+        RestaurantTable table = new RestaurantTable();
+        table.setId(tableId);
+        table.setTableNumber("T1");
+        table.setCurrentSessionId(activeSessionId);
+        when(restaurantContextService.getActiveTable(tableId)).thenReturn(table);
+        when(customerOrderRepository.findByTableIdAndSessionIdOrderByCreatedAtDesc(
+                eq(tableId), eq(activeSessionId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        OrdersResponse response = orderService.getOrdersByTable(tableId, staleSessionId, 0, 20);
+
+        verify(customerOrderRepository).findByTableIdAndSessionIdOrderByCreatedAtDesc(
+                eq(tableId), eq(activeSessionId), any(Pageable.class));
+        assertThat(response.sessionId()).isEqualTo(activeSessionId);
+        assertThat(response.sessionActive()).isTrue();
     }
 
     @Test

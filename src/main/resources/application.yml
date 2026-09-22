@@ -1,18 +1,20 @@
 spring:
+  profiles:
+    default: local
   application:
     name: restaurant-ordering
   datasource:
-    url: jdbc:h2:mem:restaurantdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false
+    url: ${DATABASE_URL:jdbc:h2:file:./data/restaurantdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE}
     driver-class-name: org.h2.Driver
     username: sa
     password:
   h2:
     console:
-      enabled: true
+      enabled: false
       path: /h2-console
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
@@ -20,6 +22,10 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 server:
   error:
@@ -32,5 +38,28 @@ management:
         include: health,info,metrics
 
 app:
+  customer-base-url: ${APP_CUSTOMER_BASE_URL:http://localhost:5173}
+  auth:
+    jwt-secret: ${APP_AUTH_JWT_SECRET:local-dev-signing-key-change-before-production-2026}
+    access-token-minutes: ${APP_AUTH_ACCESS_TOKEN_MINUTES:480}
+    cookie-name: restaurant_access_token
+    secure-cookie: ${APP_AUTH_SECURE_COOKIE:false}
+    password-reset-minutes: ${APP_AUTH_PASSWORD_RESET_MINUTES:30}
+    expose-reset-token: ${APP_AUTH_EXPOSE_RESET_TOKEN:true}
+  storage:
+    menu-image-directory: ${APP_MENU_IMAGE_DIRECTORY:./data/menu-images}
+  sample:
+    enabled: false
+    admin-username: ${APP_SAMPLE_ADMIN_USERNAME:admin}
+    admin-email: ${APP_SAMPLE_ADMIN_EMAIL:admin@spicegarden.local}
+    admin-password: ${APP_SAMPLE_ADMIN_PASSWORD:Admin@12345}
   websocket:
-    allowed-origins: "*"
+    allowed-origins: ${APP_WEBSOCKET_ALLOWED_ORIGINS:http://localhost:*}
+  platform:
+    bootstrap-username: ${APP_PLATFORM_USERNAME:}
+    bootstrap-email: ${APP_PLATFORM_EMAIL:}
+    bootstrap-password: ${APP_PLATFORM_PASSWORD:}
+    totp-secret: ${APP_PLATFORM_TOTP_SECRET:}
+  mail:
+    enabled: ${APP_MAIL_ENABLED:false}
+    from: ${APP_MAIL_FROM:noreply@example.com}

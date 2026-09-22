@@ -5,7 +5,99 @@
     "description": "Sample requests for the QR-based restaurant ordering backend.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!['GET', 'HEAD', 'OPTIONS'].includes(pm.request.method)) {",
+          "  pm.sendRequest(pm.variables.get('baseUrl') + '/api/auth/csrf', (error, response) => {",
+          "    if (error || response.code !== 200) { throw new Error('Unable to obtain CSRF token'); }",
+          "    const csrf = response.json();",
+          "    pm.request.headers.upsert({ key: csrf.headerName, value: csrf.token });",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
   "item": [
+    {
+      "name": "Platform Owner Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"{{platformUsername}}\",\"password\":\"{{platformPassword}}\",\"code\":\"{{platformTotp}}\"}" },
+        "url": "{{baseUrl}}/api/auth/platform-login"
+      }
+    },
+    {
+      "name": "Platform Overview",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/platform/overview" }
+    },
+    {
+      "name": "Platform Restaurants",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/platform/restaurants?search=&page=0" }
+    },
+    {
+      "name": "Restaurant Admin Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Admin@12345\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Restaurant Tables",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/tables",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "tables"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create Restaurant Table",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"tableNumber\": \"PATIO 1\"\n}" },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/tables",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "tables"]
+        }
+      }
+    },
     {
       "name": "Get Menu",
       "request": {
@@ -41,6 +133,10 @@
           {
             "key": "X-Idempotency-Key",
             "value": "demo-order-001"
+          },
+          {
+            "key": "X-Ordering-Client-Id",
+            "value": "postman-client"
           }
         ],
         "body": {
@@ -98,10 +194,6 @@
           {
             "key": "Content-Type",
             "value": "application/json"
-          },
-          {
-            "key": "X-Restaurant-Id",
-            "value": "{{restaurantId}}"
           }
         ],
         "body": {
@@ -121,9 +213,166 @@
           ]
         }
       }
+    },
+    {
+      "name": "Record Paid And Close Session",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/table-sessions/{{tableId}}/close",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "table-sessions",
+            "{{tableId}}",
+            "close"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Sales Statement",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/reports/sales?from={{reportFrom}}&to={{reportTo}}&timeZone=Asia%2FKolkata&page=0&size=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "reports",
+            "sales"
+          ],
+          "query": [
+            {
+              "key": "from",
+              "value": "{{reportFrom}}"
+            },
+            {
+              "key": "to",
+              "value": "{{reportTo}}"
+            },
+            {
+              "key": "timeZone",
+              "value": "Asia/Kolkata"
+            },
+            {
+              "key": "tableId",
+              "value": "{{tableId}}",
+              "disabled": true
+            },
+            {
+              "key": "menuItemId",
+              "value": "{{menuItemId1}}",
+              "disabled": true
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "20"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create Menu Category",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Desserts\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu-categories",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "restaurants",
+            "{{restaurantId}}",
+            "menu-categories"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Request Password Reset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/password-reset/request",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "password-reset",
+            "request"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Confirm Password Reset",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{passwordResetToken}}\",\n  \"newPassword\": \"NewAdmin@12345\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/password-reset/confirm",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "password-reset",
+            "confirm"
+          ]
+        }
+      }
     }
   ],
   "variable": [
+    { "key": "platformUsername", "value": "" },
+    { "key": "platformPassword", "value": "" },
+    { "key": "platformTotp", "value": "" },
     {
       "key": "baseUrl",
       "value": "http://localhost:8080"
@@ -146,6 +395,18 @@
     },
     {
       "key": "menuItemId2",
+      "value": ""
+    },
+    {
+      "key": "reportFrom",
+      "value": "2026-01-01T00:00:00Z"
+    },
+    {
+      "key": "reportTo",
+      "value": "2026-12-31T23:59:59Z"
+    },
+    {
+      "key": "passwordResetToken",
       "value": ""
     }
   ]
