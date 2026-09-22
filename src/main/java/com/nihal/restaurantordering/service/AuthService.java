@@ -65,6 +65,9 @@ public class AuthService {
     private LoginResult authenticate(String username, String password, boolean platform, String code) {
         String normalizedUsername = normalize(username);
         attempts.check("login:" + normalizedUsername, 20);
+        if (password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new UnauthorizedException("Invalid username or password");
+        }
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(normalizedUsername, password)
@@ -137,6 +140,9 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(String rawToken, String newPassword) {
+        if (newPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new BadRequestException("Password must be at most 72 UTF-8 bytes; use fewer characters");
+        }
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         String hash = hashToken(rawToken.trim());
         var candidate = passwordResetTokenRepository.findByTokenHash(hash)

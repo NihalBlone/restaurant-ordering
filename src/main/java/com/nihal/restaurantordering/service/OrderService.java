@@ -74,7 +74,7 @@ public class OrderService {
         String normalizedIdempotencyKey = idempotencyService.normalizeKey(idempotencyKey);
 
         if (normalizedIdempotencyKey != null) {
-            OrderResponse existingOrder = idempotencyService.findExistingResponse(normalizedIdempotencyKey);
+            OrderResponse existingOrder = idempotencyService.findExistingResponse(normalizedIdempotencyKey, table.getId());
             if (existingOrder != null) {
                 log.info("Reusing order {} for idempotency key {}", existingOrder.orderId(), normalizedIdempotencyKey);
                 return existingOrder;

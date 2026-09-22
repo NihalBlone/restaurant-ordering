@@ -1,5 +1,8 @@
 # Platform Setup And Deployment
 
+For the two-repository Render deployment, domain purchase, and release commands, use
+[DEPLOYMENT.md](DEPLOYMENT.md). The instructions below also cover local development and generic hosts.
+
 ## Entry Points
 
 | Audience | Frontend route | Access |
@@ -39,7 +42,7 @@ The bootstrap creates an account only if its username is absent. It never change
 
 Spring Boot does not automatically load `.env`; export values explicitly. `.env.example` documents local variables and Docker Compose reads `.env` for its database password.
 
-Start the UI from `../qr-restaurant-ordering-UI` with `npm run dev`, then open `http://localhost:5173/platform/login`.
+Start the UI from `../qr-restaurant-ordering-UI/restaurant_ordering_UI` with `npm run dev`, then open `http://localhost:5173/platform/login`.
 
 **Upgrade note:** do not stop an older in-memory backend if its current data matters until you have exported it. This change does not recover data from a previous ephemeral H2 process, migrate it to PostgreSQL, or preserve IDs that were already lost. New databases receive both Flyway migrations. For an existing nonempty database without Flyway history, first take a backup and compare its schema with V1; baseline at version 1 only after verification, then apply V2. Automatic baselining is intentionally disabled.
 
@@ -58,7 +61,8 @@ mvn -s .mvn/settings-public.xml spring-boot:run -Dspring-boot.run.profiles=postg
 
 The `postgres` profile does not seed demo restaurant data. It is a local development profile, not a production security preset. Use the platform console to onboard a restaurant. The Docker volume persists database files across restarts; `docker compose down -v` deletes that volume, so do not use it on data you need.
 
-For production, use **only** the `prod` profile and configure:
+For a generic production host, use the `prod` profile and configure the variables below.
+The included Render Blueprint instead uses `prod,render` and private database fields; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ```text
 SPRING_PROFILES_ACTIVE=prod
@@ -116,7 +120,7 @@ Sales reports retain date/table/food filters, bar charts, bill history, and CSV 
 ## Go-Live Work Still Required
 
 - Provision cloud database, DNS/TLS, SMTP, monitoring/alerts, and tested automated backups. No cloud resources are created by this implementation.
-- Run the application against your actual PostgreSQL version and exercise concurrent orders, settlement, and migration/restore paths before release. Local tests cover migrations with H2, not PostgreSQL locking semantics.
+- Run the application against your actual PostgreSQL version and rehearse migration/restore paths before release. CI includes real PostgreSQL migration, concurrent-order, session, and report tests; local runs need `TEST_DATABASE_URL`, `TEST_DATABASE_USERNAME`, and `TEST_DATABASE_PASSWORD` to enable that suite.
 - Use a shared STOMP broker and distributed rate limiter before adding backend replicas. Current messaging and authentication throttling are in-process.
 - Store images on a durable volume for one instance or add object storage/CDN for multiple instances. Image uploads are not cloud-backed yet.
 - Review QR/session access: table IDs are bearer links, not proof of physical presence. Time-limited signed QR/session capabilities and abuse prevention are needed for stronger protection against copied links.
@@ -127,7 +131,7 @@ Sales reports retain date/table/food filters, bar charts, bill history, and CSV 
 
 ```sh
 mvn -s .mvn/settings-public.xml test
-cd ../qr-restaurant-ordering-UI
+cd ../qr-restaurant-ordering-UI/restaurant_ordering_UI
 npm test
 npm run build
 ```

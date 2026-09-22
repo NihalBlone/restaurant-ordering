@@ -1,0 +1,12 @@
+.git
+.DS_Store
+.frontend
+target
+data
+node_modules
+.env*
+**/*.log
+**/*.pem
+**/*.key
+backups
+secrets

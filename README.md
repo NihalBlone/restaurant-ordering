@@ -2,6 +2,22 @@
 
 Spring Boot 3 / Java 17 backend for multi-tenant, QR-based table ordering. Customers order without an account; restaurant operations are protected by a tenant-scoped admin login.
 
+## Go Live With Your Two Repositories
+
+This is the backend and deployment repository: [NihalBlone/restaurant-ordering](https://github.com/NihalBlone/restaurant-ordering).
+The UI stays in [NihalBlone/restaurant_ordering_UI](https://github.com/NihalBlone/restaurant_ordering_UI).
+No folder move or third repository is required.
+
+The root Dockerfile builds the exact public UI commit in `deploy/frontend.ref`, then packages React inside
+Spring Boot. One Render web service serves UI, API, photos, and WebSocket on the same HTTPS domain, with
+managed PostgreSQL and a persistent photo disk. A UI push alone does not update production: update the
+backend's pin to the published UI commit and push the backend to release it.
+
+Follow [the deployment guide](docs/DEPLOYMENT.md) for exact push commands, hosting, domain purchase,
+email, secrets, and first-restaurant setup. Read [operations and recovery](docs/OPERATIONS.md) before launch.
+See [verification results and remaining checks](docs/VERIFICATION.md) for what has actually been tested.
+The old combined `restaurant-ordering` checkout is not used by this deployment.
+
 ## Implemented
 
 - QR menu lookup and server-owned table sessions

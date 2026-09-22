@@ -107,7 +107,7 @@ class OrderServiceTest {
 
         when(restaurantContextService.getActiveTableForUpdate(tableId)).thenReturn(table);
         when(idempotencyService.normalizeKey(" idem-1 ")).thenReturn("idem-1");
-        when(idempotencyService.findExistingResponse("idem-1")).thenReturn(existingOrder);
+        when(idempotencyService.findExistingResponse("idem-1", tableId)).thenReturn(existingOrder);
 
         OrderResponse response = orderService.placeOrder(
                 " idem-1 ",

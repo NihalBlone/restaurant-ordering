@@ -100,6 +100,19 @@ class PlatformIntegrationTest {
         assertThatThrownBy(() -> auth.resetPassword(reset.developmentResetToken(), "Updated-password!2")).hasMessageContaining("invalid or expired");
     }
 
+    @Test void rejectsPasswordsLongerThanBcryptByteLimitWithoutServerError() throws Exception {
+        String oversized = "Aa1!" + "\u00e9".repeat(40);
+        mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsBytes(Map.of("username", owner.getUsername(), "password", oversized))))
+                .andExpect(status().isUnauthorized());
+        var reset = auth.requestPasswordReset(owner.getUsername());
+        mvc.perform(post("/api/auth/password-reset/confirm").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsBytes(Map.of("token", reset.developmentResetToken(), "newPassword", oversized))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(
+                        "Password must be at most 72 UTF-8 bytes; use fewer characters"));
+        auth.resetPassword(reset.developmentResetToken(), "Valid-password!123");
+    }
+
     @Test void revokedAndDisabledAccountsCannotUseExistingCookies() throws Exception {
         var waiter = account(restaurant.getId(), AdminRole.WAITER);
         Cookie previous = cookie(waiter);

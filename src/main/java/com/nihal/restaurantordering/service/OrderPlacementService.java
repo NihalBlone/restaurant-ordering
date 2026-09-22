@@ -26,7 +26,7 @@ public class OrderPlacementService {
                 throw exception;
             }
             OrderResponse existing = idempotencyService
-                    .findExistingResponseOrThrow(normalizedKey, exception);
+                    .findExistingResponseOrThrow(normalizedKey, request.tableId(), exception);
             log.info("Concurrent request reused order {} for idempotency key {}",
                     existing.orderId(), normalizedKey);
             return existing;

@@ -1,0 +1,40 @@
+# Disposable, local-only full-image test. Never expose this demo configuration publicly.
+# Separate project name/port so it cannot replace your existing development database.
+name: restaurant-ordering-smoke
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${SMOKE_PORT:-18083}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      DATABASE_URL: jdbc:postgresql://database:5432/restaurant_ordering
+      DATABASE_USERNAME: restaurant_app
+      DATABASE_PASSWORD: local-demo-only
+      APP_SAMPLE_ENABLED: "true"
+      APP_CUSTOMER_BASE_URL: http://localhost:${SMOKE_PORT:-18083}
+      APP_WEBSOCKET_ALLOWED_ORIGINS: http://localhost:${SMOKE_PORT:-18083}
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE: readinessState,db
+    volumes:
+      - menu_photos:/var/data
+    depends_on:
+      database:
+        condition: service_healthy
+    stop_grace_period: 40s
+  database:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: restaurant_ordering
+      POSTGRES_USER: restaurant_app
+      POSTGRES_PASSWORD: local-demo-only
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restaurant_app -d restaurant_ordering"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres_data:
+  menu_photos:

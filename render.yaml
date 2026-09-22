@@ -1,0 +1,70 @@
+# Paid resources. Review Render's cost estimate before approving this Blueprint.
+# One instance: the current WebSocket broker/rate limiters are process-local.
+services:
+  - type: web
+    name: restaurant-ordering
+    runtime: docker
+    region: singapore
+    plan: 1c-2g
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: checksPass
+    healthCheckPath: /actuator/health/readiness
+    maxShutdownDelaySeconds: 60
+    disk:
+      name: menu-photos
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod,render
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: restaurant-ordering-db
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: restaurant-ordering-db
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: restaurant-ordering-db
+          property: database
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: restaurant-ordering-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: restaurant-ordering-db
+          property: password
+      - key: APP_AUTH_JWT_SECRET
+        sync: false
+      - key: APP_PLATFORM_USERNAME
+        sync: false
+      - key: APP_PLATFORM_EMAIL
+        sync: false
+      - key: APP_PLATFORM_PASSWORD
+        sync: false
+      - key: APP_PLATFORM_TOTP_SECRET
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        value: resend
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: APP_MAIL_FROM
+        sync: false
+databases:
+  - name: restaurant-ordering-db
+    region: singapore
+    plan: 0.5c-1g
+    postgresMajorVersion: "16"
+    databaseName: restaurant_ordering
+    user: restaurant_app
+    diskSizeGB: 5
+    ipAllowList: []

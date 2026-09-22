@@ -45,7 +45,7 @@ public class StaffService {
         account.setEmail(request.email().trim());
         account.setEmailNormalized(email);
         account.setRole(request.role());
-        account.setPasswordHash(encoder.encode(UUID.randomUUID() + ":" + UUID.randomUUID()));
+        account.setPasswordHash(encoder.encode(UUID.randomUUID().toString() + UUID.randomUUID()));
         accounts.saveAndFlush(account);
         var invitation = auth.requestPasswordReset(username);
         audit.record("STAFF_INVITED", restaurantId, account.getId(), "Role: " + request.role());

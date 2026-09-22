@@ -1,0 +1,8 @@
+# Use with prod: SPRING_PROFILES_ACTIVE=prod,render. Never activate render alone.
+spring:
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST}:${DATABASE_PORT:5432}/${DATABASE_NAME}?sslmode=require
+app:
+  customer-base-url: ${APP_CUSTOMER_BASE_URL:https://${RENDER_EXTERNAL_HOSTNAME}}
+  websocket:
+    allowed-origins: ${APP_WEBSOCKET_ALLOWED_ORIGINS:${app.customer-base-url}}

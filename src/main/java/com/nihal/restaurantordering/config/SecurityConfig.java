@@ -64,10 +64,13 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/menu", "/cart", "/track",
+                                "/admin/login", "/admin/forgot-password", "/admin/reset-password", "/dashboard",
+                                "/platform", "/platform/login", "/assets/**", "/favicon.svg", "/robots.txt").permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/platform-login", "/api/auth/csrf", "/api/auth/logout",
                                 "/api/auth/password-reset/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/menu", "/api/orders", "/uploads/**",
-                                "/actuator/health", "/actuator/info").permitAll()
+                                "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()
                         .requestMatchers("/ws-orders/**", "/error").permitAll()
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
@@ -130,9 +133,10 @@ public class SecurityConfig {
     @Bean
     public BearerTokenResolver bearerTokenResolver() {
         return request -> {
-            String path = request.getServletPath();
+            String path = request.getRequestURI().substring(request.getContextPath().length());
             // A stale cookie must not prevent signing in again or using a public QR.
-            if (path.equals("/api/auth/login") || path.equals("/api/auth/platform-login")
+            if ((!path.startsWith("/api/") && !path.startsWith("/ws-orders"))
+                    || path.equals("/api/auth/login") || path.equals("/api/auth/platform-login")
                     || path.equals("/api/auth/csrf") || path.startsWith("/api/auth/password-reset/")
                     || path.equals("/api/menu") || path.equals("/api/orders")) {
                 return null;
