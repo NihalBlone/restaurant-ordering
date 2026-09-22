@@ -25,7 +25,7 @@ jobs:
           --health-cmd "pg_isready -U restaurant_test -d restaurant_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fetch the exact UI version selected for this release
         run: bash scripts/fetch-frontend.sh
       - uses: actions/setup-node@v4
@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 25
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build both repositories and start PostgreSQL
         run: docker compose -f compose.smoke.yml up --build --wait --wait-timeout 180
       - name: Verify packaged UI, API, and WebSocket transport
