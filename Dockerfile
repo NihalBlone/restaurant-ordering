@@ -10,7 +10,7 @@ RUN bash scripts/fetch-frontend.sh /build/frontend
 WORKDIR /build/frontend
 RUN npm ci --no-audit --no-fund && npm test && npm run build
 
-FROM maven:3.9-eclipse-temurin-17 AS backend
+FROM maven:3-eclipse-temurin-26 AS backend
 WORKDIR /build/backend
 COPY pom.xml ./
 COPY .mvn/ .mvn/
