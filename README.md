@@ -9,11 +9,16 @@ The UI stays in [NihalBlone/restaurant_ordering_UI](https://github.com/NihalBlon
 No folder move or third repository is required.
 
 The root Dockerfile builds the exact public UI commit in `deploy/frontend.ref`, then packages React inside
-Spring Boot. One Render web service serves UI, API, photos, and WebSocket on the same HTTPS domain, with
-managed PostgreSQL and a persistent photo disk. A UI push alone does not update production: update the
-backend's pin to the published UI commit and push the backend to release it.
+Spring Boot. UI, API, photos, and WebSocket use the same HTTPS domain. A UI push alone does not update
+production: update the backend's pin to the published UI commit and push the backend to release it.
 
-Follow [the deployment guide](docs/DEPLOYMENT.md) for exact push commands, hosting, domain purchase,
+For the **2 GB DigitalOcean server and GoDaddy domain**, follow [DEPLOYMENT-VPS.md](docs/DEPLOYMENT-VPS.md).
+CI tests and publishes a release image to GHCR; the server pulls it without compiling Java or React.
+The VPS configuration runs PostgreSQL, Java, and Caddy with memory limits and persistent volumes.
+Publishing a release does not automatically deploy it, and local configuration tests are not a load test.
+
+For the alternative managed Render hosting setup, follow [the deployment guide](docs/DEPLOYMENT.md)
+for exact push commands, hosting, domain purchase,
 email, secrets, and first-restaurant setup. Read [operations and recovery](docs/OPERATIONS.md) before launch.
 See [verification results and remaining checks](docs/VERIFICATION.md) for what has actually been tested.
 The old combined `restaurant-ordering` checkout is not used by this deployment.

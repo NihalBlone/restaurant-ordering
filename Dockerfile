@@ -20,6 +20,7 @@ COPY --from=frontend /build/frontend/dist/ src/main/resources/static/
 RUN mvn -B -s .mvn/settings-public.xml package --no-transfer-progress
 
 FROM eclipse-temurin:17-jre-jammy AS runtime
+LABEL org.opencontainers.image.source="https://github.com/NihalBlone/restaurant-ordering"
 RUN apt-get update && apt-get install -y --no-install-recommends gosu curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app \

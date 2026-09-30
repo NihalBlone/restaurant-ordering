@@ -1,0 +1,121 @@
+name: servemytable
+
+x-runtime: &runtime
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  database:
+    <<: *runtime
+    image: postgres:16-bookworm
+    mem_limit: 384m
+    memswap_limit: 384m
+    shm_size: 64m
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD}
+      APP_DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - max_connections=20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-database.sh:/docker-entrypoint-initdb.d/10-app.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 60s
+
+  app:
+    <<: *runtime
+    # Pull the tested release by digest. Never build on the 2 GB production host.
+    image: ${APP_IMAGE:?Set the digest-pinned APP_IMAGE from GitHub Actions}
+    platform: linux/amd64
+    mem_limit: 1024m
+    memswap_limit: 1024m
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      PORT: "8080"
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m -XX:+ExitOnOutOfMemoryError -Duser.timezone=UTC -Djava.net.preferIPv4Stack=true
+      SERVER_TOMCAT_THREADS_MAX: "40"
+      SERVER_TOMCAT_THREADS_MIN_SPARE: "5"
+      SERVER_TOMCAT_MAX_CONNECTIONS: "128"
+      SERVER_TOMCAT_ACCEPT_COUNT: "50"
+      # Plaintext DB traffic is confined to this host's isolated Docker network.
+      DATABASE_URL: jdbc:postgresql://database:5432/restaurant_ordering?sslmode=disable
+      DATABASE_USERNAME: restaurant_app
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
+      DATABASE_POOL_SIZE: "5"
+      APP_CUSTOMER_BASE_URL: https://${APP_DOMAIN:?Set APP_DOMAIN}
+      APP_WEBSOCKET_ALLOWED_ORIGINS: https://${APP_DOMAIN:?Set APP_DOMAIN}
+      APP_AUTH_JWT_SECRET: ${APP_AUTH_JWT_SECRET:?Set APP_AUTH_JWT_SECRET}
+      APP_PLATFORM_TOTP_SECRET: ${APP_PLATFORM_TOTP_SECRET:?Set APP_PLATFORM_TOTP_SECRET}
+      APP_PLATFORM_USERNAME: ${APP_PLATFORM_USERNAME:-}
+      APP_PLATFORM_EMAIL: ${APP_PLATFORM_EMAIL:-}
+      APP_PLATFORM_PASSWORD: ${APP_PLATFORM_PASSWORD:-}
+      APP_MENU_IMAGE_DIRECTORY: /var/data/menu-images
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-2587}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:?Set APP_MAIL_FROM}
+    volumes:
+      - menu_photos:/var/data
+    networks: [web, database]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8080/actuator/health/readiness]
+      start_period: 120s
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 40s
+
+  proxy:
+    <<: *runtime
+    image: caddy:2-alpine
+    mem_limit: 128m
+    memswap_limit: 128m
+    environment:
+      SERVER_NAME: ${APP_DOMAIN:?Set APP_DOMAIN}
+      GOMEMLIMIT: 96MiB
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  web:
+  database:
+    internal: true
+
+volumes:
+  postgres_data:
+  menu_photos:
+  caddy_data:
+  caddy_config:

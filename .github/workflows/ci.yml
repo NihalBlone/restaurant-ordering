@@ -10,6 +10,18 @@ concurrency:
   group: verify-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  deployment-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate private config generation and the 2 GB Compose model
+        run: python3 scripts/test-vps.py --compose
+      - name: Validate deployment shell scripts
+        run: |
+          for script in scripts/vps.sh scripts/smoke-vps.sh scripts/backup-vps.sh deploy/vps/init-database.sh; do
+            bash -n "$script"
+          done
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -59,17 +71,70 @@ jobs:
         working-directory: .frontend
   container:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    needs: [backend, frontend]
+    timeout-minutes: 35
+    needs: [backend, frontend, deployment-config]
     steps:
       - uses: actions/checkout@v4
       - name: Build both repositories and start PostgreSQL
         run: docker compose -f compose.smoke.yml up --build --wait --wait-timeout 180
       - name: Verify packaged UI, API, and WebSocket transport
         run: bash scripts/smoke-test.sh http://localhost:18083
+      - name: Tag the exact tested image and stop demo services
+        run: |
+          image=$(docker compose -f compose.smoke.yml images -q app)
+          docker tag "$image" "restaurant-ordering-release:$GITHUB_SHA"
+          docker compose -f compose.smoke.yml stop
+      - name: Test production profile, private PostgreSQL, memory limits, and persistent volumes
+        run: bash scripts/smoke-vps.sh "restaurant-ordering-release:$GITHUB_SHA"
+      - name: Export the tested release for publication (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: docker save "restaurant-ordering-release:$GITHUB_SHA" | gzip > "$RUNNER_TEMP/restaurant-image.tar.gz"
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: tested-container
+          path: ${{ runner.temp }}/restaurant-image.tar.gz
+          retention-days: 1
+          compression-level: 0
       - name: Logs on failure
         if: failure()
         run: docker compose -f compose.smoke.yml logs --no-color --tail=150
       - name: Remove disposable CI resources
         if: always()
         run: docker compose -f compose.smoke.yml down --volumes
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-container
+          path: ${{ runner.temp }}
+      - name: Publish the tested image to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-$GITHUB_SHA"
+          gzip -dc "$RUNNER_TEMP/restaurant-image.tar.gz" | docker load
+          docker tag "restaurant-ordering-release:$GITHUB_SHA" "$image"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io' EXIT
+          docker push "$image"
+          docker pull "$image"
+          digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+          {
+            echo '## VPS release (not automatically deployed)'
+            echo 'Use this immutable image in /opt/servemytable/.env:'
+            echo '```text'
+            echo "APP_IMAGE=$digest"
+            echo "CONFIG_REF=$GITHUB_SHA"
+            echo '```'
+            echo 'For token-free pulls, make the GHCR package public after its first publication.'
+            echo 'Follow docs/DEPLOYMENT-VPS.md. Production secrets are never sent to this workflow.'
+          } >> "$GITHUB_STEP_SUMMARY"

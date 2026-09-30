@@ -1,5 +1,28 @@
 # Deployment Verification
 
+## VPS Preparation, 2026-09-30
+
+- Seven local Python/Compose checks passed, including secret generation, mode-600 creation,
+  overwrite/symlink refusal, input validation, the non-CI smoke-test guard, missing-config handling,
+  resolved network/port isolation, production profile, app DB role and the 1536 MiB container budget.
+- The resolved model was validated with the official Docker Compose 5.5.1 CLI in a temporary directory;
+  its release checksum was verified. This does not require or prove a working Docker daemon.
+- The GitHub Actions workflow passed actionlint 1.7.12 (shellcheck integration disabled); shell scripts
+  were checked separately with `bash -n`. `git diff --check` passed.
+- No Java/React business code changed. Their previous test results below are historical, not a new run.
+- Full container execution was NOT possible on this Mac because its Docker daemon is unavailable.
+  The updated workflow must pass its production-profile startup, non-superuser DB, bootstrap removal,
+  persistent photo, backup/DB-restore, Caddy configuration and existing regression checks before publish.
+  These new CI checks have been added but have not been observed running yet.
+- Nothing was pushed, published, deployed to the Droplet, or changed in GoDaddy by this preparation.
+  No live secrets were generated. Real DNS/HTTPS, SMTP delivery, SSH hardening, off-server backups,
+  recovery rehearsal with real data and concurrent-user load testing remain launch requirements.
+
+Follow [the VPS guide](DEPLOYMENT-VPS.md) for DigitalOcean; the Render results below concern the earlier
+alternative deployment, not the new server.
+
+## Earlier Render Verification
+
 Local verification on 2026-09-22, before committing these deployment changes:
 
 - Backend: 70 tests passed, zero failures/errors/skips, using Java 17 and Spring Boot 3.5.16.

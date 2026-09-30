@@ -1,5 +1,9 @@
 # Deploy Your Separate Backend And UI Repositories
 
+**Using the 2 GB DigitalOcean Droplet with GoDaddy instead? Follow [DEPLOYMENT-VPS.md](DEPLOYMENT-VPS.md).**
+The remainder of this page describes the alternative Render setup. Do not mix its database, TLS, or
+SMTP port settings with the VPS instructions.
+
 Keep your existing folders and repositories:
 
 | Purpose | Local directory | GitHub repository |
