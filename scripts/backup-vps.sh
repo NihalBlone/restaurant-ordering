@@ -15,13 +15,16 @@ cleanup() {
   result=$?
   trap - EXIT
   if [ "$restart_needed" = true ]; then
-    if ! vps start --wait --wait-timeout 300 app; then
+    # Older Compose runners support --wait on up, but not on start.
+    if ! vps up -d --no-deps --no-recreate --no-build --pull never --wait --wait-timeout 300 app; then
       printf 'App restart failed: inspect readiness immediately.\n' >&2
       result=1
     fi
   fi
   if [ "$result" -ne 0 ]; then
     printf 'Backup/restart failed. Keep the previous backup; inspect %s before use.\n' "$output" >&2
+  else
+    printf 'Backup created at %s. Encrypt and copy off this server; test restoration separately.\n' "$output"
   fi
   exit "$result"
 }
@@ -40,4 +43,3 @@ vps exec -T database pg_restore --list < "$output/database.dump.partial" > /dev/
 tar -tzf "$output/photos.tar.gz.partial" > /dev/null
 mv "$output/database.dump.partial" "$output/database.dump"
 mv "$output/photos.tar.gz.partial" "$output/photos.tar.gz"
-printf 'Backup created at %s. Encrypt and copy off this server; test restoration separately.\n' "$output"

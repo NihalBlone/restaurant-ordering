@@ -1,5 +1,25 @@
 # Deployment Verification
 
+## Backup Restart Fix, 2026-10-01
+
+- [Run 36734378850](https://github.com/NihalBlone/restaurant-ordering/actions/runs/36734378850)
+  passed the backend, frontend and deployment-config jobs. Its container job built the image and
+  passed the packaged UI/API/WebSocket smoke checks. The supplied production-test log also shows
+  successful startup, container replacement, persistent-data assertions and backup creation.
+- The failure was in the backup cleanup: the runner rejected `docker compose start --wait` with
+  `unknown flag: --wait`. Publishing was skipped. Database restoration and Caddy validation were
+  not reached in that run.
+- The backup helper now uses health-checked `up` with `--no-deps --no-recreate --no-build --pull never`.
+  It preserves the existing app container and only reports success after recovery succeeds. A
+  previously stopped app is not started, and failed recovery still returns a nonzero exit status.
+- Sixteen local checks passed, including eight backup shell regression tests using a strict Docker
+  stub, Compose option support and the resolved Compose model. Four regression tests failed against
+  the original restart command before the fix. The CLI checks used Docker Compose 5.5.1; shell syntax
+  and `git diff --check` also passed.
+- Stub tests do not prove live PostgreSQL backup/restore or container readiness. The local Docker
+  daemon remains unavailable; push this fix and require a new complete CI run before deploying.
+  No production server, DNS, secrets, or repository remote were changed by this fix.
+
 ## VPS Preparation, 2026-09-30
 
 - Seven local Python/Compose checks passed, including secret generation, mode-600 creation,

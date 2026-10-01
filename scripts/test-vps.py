@@ -7,6 +7,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 
@@ -87,6 +88,13 @@ class ConfigurationTest(unittest.TestCase):
             self.assertIn("Missing private configuration", result.stderr)
 
     @unittest.skipUnless(COMPOSE, "Pass --compose when the Docker Compose CLI is available")
+    def test_compose_supports_backup_restart_options(self):
+        result = subprocess.run(["docker", "compose", "up", "--help"], check=True,
+                                capture_output=True, text=True)
+        for option in ("--no-deps", "--no-recreate", "--no-build", "--pull", "--wait", "--wait-timeout"):
+            self.assertIn(option, result.stdout)
+
+    @unittest.skipUnless(COMPOSE, "Pass --compose when the Docker Compose CLI is available")
     def test_compose_model(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env"
@@ -114,6 +122,98 @@ class ConfigurationTest(unittest.TestCase):
             self.assertEqual(1536 * 1024 * 1024, sum(int(s["mem_limit"]) for s in (app, db, proxy)))
             self.assertTrue(all(s["logging"]["driver"] == "local" for s in (app, db, proxy)))
             self.assertEqual("https://orders.example.com", app["environment"]["APP_CUSTOMER_BASE_URL"])
+
+
+class BackupTest(unittest.TestCase):
+    RESTART = ["up", "-d", "--no-deps", "--no-recreate", "--no-build", "--pull", "never",
+               "--wait", "--wait-timeout", "300", "app"]
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        self.output = self.directory / "backup"
+        self.log = self.directory / "commands.jsonl"
+        private_config = self.directory / ".env"
+        CONFIG.write_configuration(private_config, values())
+        executable = self.directory / "docker"
+        fixture = ROOT / "scripts/test-fixtures/docker-backup.py"
+        executable.write_text(f"#!{sys.executable}\n" + fixture.read_text())
+        executable.chmod(0o700)
+        self.environment = dict(os.environ, PATH=f"{self.directory}{os.pathsep}{os.environ['PATH']}",
+                                VPS_ENV_FILE=str(private_config), BACKUP_TEST_LOG=str(self.log),
+                                BACKUP_TEST_RUNNING="true", BACKUP_TEST_FAILURE="")
+
+    def backup(self, failure="", running=True):
+        self.environment.update(BACKUP_TEST_FAILURE=failure,
+                                BACKUP_TEST_RUNNING="true" if running else "false")
+        return subprocess.run(["bash", str(ROOT / "scripts/backup-vps.sh"), str(self.output)],
+                              env=self.environment, capture_output=True, text=True, timeout=30)
+
+    def commands(self):
+        return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+    def test_success_restarts_existing_app_and_validates_archives(self):
+        result = self.backup()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("Backup created", result.stdout)
+        commands = self.commands()
+        self.assertEqual(["stop", "app"], commands[1])
+        self.assertEqual(self.RESTART, commands[-1])
+        self.assertEqual(1, commands.count(self.RESTART))
+        self.assertEqual(b"test-database-dump", (self.output / "database.dump").read_bytes())
+        with tarfile.open(self.output / "photos.tar.gz") as archive:
+            self.assertEqual(b"test-photo", archive.extractfile("menu-images/test-photo").read())
+        self.assertEqual(0o700, stat.S_IMODE(self.output.stat().st_mode))
+        self.assertEqual(0o600, stat.S_IMODE((self.output / "database.dump").stat().st_mode))
+        self.assertEqual([], list(self.output.glob("*.partial")))
+
+    def test_failed_dump_still_restarts_app_and_preserves_failure(self):
+        result = self.backup(failure="dump")
+        self.assertEqual(23, result.returncode, result.stderr)
+        self.assertEqual(self.RESTART, self.commands()[-1])
+        self.assertNotIn("Backup created", result.stdout)
+        self.assertIn("Backup/restart failed", result.stderr)
+        self.assertFalse((self.output / "database.dump").exists())
+
+    def test_failed_archive_still_restarts_app(self):
+        result = self.backup(failure="archive")
+        self.assertEqual(24, result.returncode, result.stderr)
+        self.assertEqual(self.RESTART, self.commands()[-1])
+        self.assertFalse((self.output / "photos.tar.gz").exists())
+
+    def test_restart_failure_is_reported_as_failure(self):
+        result = self.backup(failure="restart")
+        self.assertEqual(1, result.returncode)
+        self.assertEqual(self.RESTART, self.commands()[-1])
+        self.assertIn("App restart failed", result.stderr)
+        self.assertNotIn("Backup created", result.stdout)
+        self.assertTrue((self.output / "database.dump").exists())
+
+    def test_invalid_dump_is_not_promoted_and_app_restarts(self):
+        result = self.backup(failure="validate-dump")
+        self.assertEqual(25, result.returncode, result.stderr)
+        self.assertEqual(self.RESTART, self.commands()[-1])
+        self.assertFalse((self.output / "database.dump").exists())
+
+    def test_invalid_archive_is_not_promoted_and_app_restarts(self):
+        result = self.backup(failure="invalid-archive")
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(self.RESTART, self.commands()[-1])
+        self.assertFalse((self.output / "photos.tar.gz").exists())
+
+    def test_previously_stopped_app_is_not_started(self):
+        result = self.backup(running=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotIn(["stop", "app"], self.commands())
+        self.assertNotIn(self.RESTART, self.commands())
+
+    def test_existing_backup_is_not_overwritten_or_app_stopped(self):
+        self.output.mkdir()
+        result = self.backup()
+        self.assertEqual(1, result.returncode)
+        self.assertIn("Refusing to overwrite", result.stderr)
+        self.assertEqual([], self.commands())
 
 
 if __name__ == "__main__":

@@ -208,7 +208,10 @@ and verify key-based administrator access before final SSH hardening.
 ## 8. Backups, Updates, And Recovery
 
 `backup-vps.sh` briefly stops the application to prevent changes between the DB dump and photo archive,
-then restarts it even on failure. Run outside service hours; this single-server design has downtime.
+then attempts to restart the existing container even on failure and waits for readiness. It does not
+rebuild, pull a new image, or recreate the container. A failed restart makes the command fail; inspect
+the app immediately. An app that was already stopped stays stopped. Run outside service hours;
+this single-server design has downtime.
 
 ```sh
 cd /opt/servemytable/source
